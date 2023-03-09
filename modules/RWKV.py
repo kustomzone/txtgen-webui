@@ -50,7 +50,7 @@ class RWKVModel:
         return context+self.pipeline.generate(context, token_count=token_count, args=args, callback=callback)
 
     def generate_with_streaming(self, **kwargs):
-        iterable = Iteratorize(self.generate, kwargs, callback=None)
+        iterable = Iteratorize(self.generate, kwargs)
         reply = kwargs['context']
         for token in iterable:
             reply += token

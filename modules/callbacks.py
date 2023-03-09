@@ -8,25 +8,21 @@ import modules.shared as shared
 
 
 # Copied from https://github.com/PygmalionAI/gradio-ui/
-class _SentinelTokenStoppingCriteria(transformers.StoppingCriteria):
-
-    def __init__(self, sentinel_token_ids: torch.LongTensor,
-                 starting_idx: int):
+class StopWhenIdsAreFound(transformers.StoppingCriteria):
+    def __init__(self, ids_to_watch: torch.LongTensor, starting_idx: int):
         transformers.StoppingCriteria.__init__(self)
-        self.sentinel_token_ids = sentinel_token_ids
+        self.ids_to_watch = ids_to_watch
         self.starting_idx = starting_idx
 
-    def __call__(self, input_ids: torch.LongTensor,
-                 _scores: torch.FloatTensor) -> bool:
+    def __call__(self, input_ids: torch.LongTensor, _scores: torch.FloatTensor) -> bool:
         for sample in input_ids:
             trimmed_sample = sample[self.starting_idx:]
             # Can't unfold, output is still too tiny. Skip.
-            if trimmed_sample.shape[-1] < self.sentinel_token_ids.shape[-1]:
+            if trimmed_sample.shape[-1] < self.ids_to_watch.shape[-1]:
                 continue
 
-            for window in trimmed_sample.unfold(
-                    0, self.sentinel_token_ids.shape[-1], 1):
-                if torch.all(torch.eq(self.sentinel_token_ids, window)):
+            for window in trimmed_sample.unfold(0, self.ids_to_watch.shape[-1], 1):
+                if torch.all(torch.eq(self.ids_to_watch, window)):
                     return True
         return False
 
@@ -36,7 +32,7 @@ class Stream(transformers.StoppingCriteria):
 
     def __call__(self, input_ids, scores) -> bool:
         if self.callback_func is not None:
-            self.callback_func(input_ids[0])
+            self.callback_func(input_ids)
         return False
 
 class Iteratorize:
@@ -46,9 +42,8 @@ class Iteratorize:
     into a lazy iterator (generator).
     """
 
-    def __init__(self, func, kwargs={}, callback=None):
+    def __init__(self, func, kwargs={}):
         self.mfunc=func
-        self.c_callback=callback
         self.q = Queue(maxsize=1)
         self.sentinel = object()
         self.kwargs = kwargs
@@ -59,8 +54,6 @@ class Iteratorize:
         def gentask():
             ret = self.mfunc(callback=_callback, **self.kwargs)
             self.q.put(self.sentinel)
-            if self.c_callback:
-                self.c_callback(ret)
 
         Thread(target=gentask).start()
 
