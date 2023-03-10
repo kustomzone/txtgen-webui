@@ -42,27 +42,27 @@ class Iteratorize:
     into a lazy iterator (generator).
     """
 
-    def __init__(self, func, kwargs={}):
-        self.mfunc=func
-        self.q = Queue(maxsize=1)
-        self.sentinel = object()
-        self.kwargs = kwargs
+    def __init__(self, func, extra_arguments={}):
+        self.actual_function = func
+        self.data_queue = Queue(maxsize=1)
+        self.end_signal = object()
+        self.extra_arguments = extra_arguments
 
-        def _callback(val):
-            self.q.put(val)
+        def _data_callback(value):
+            self.data_queue.put(value)
 
-        def gentask():
-            ret = self.mfunc(callback=_callback, **self.kwargs)
-            self.q.put(self.sentinel)
+        def task_generator():
+            ret = self.actual_function(callback=_data_callback, **self.extra_arguments)
+            self.data_queue.put(self.end_signal)
 
-        Thread(target=gentask).start()
+        Thread(target=task_generator).start()
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        obj = self.q.get(True,None)
-        if obj is self.sentinel:
+        data_object = self.data_queue.get(True, None)
+        if data_object is self.end_signal:
             raise StopIteration
         else:
-            return obj
+            return data_object
